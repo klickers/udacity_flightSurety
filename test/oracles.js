@@ -1,4 +1,4 @@
-
+/*
 //var Test = require('../config/testConfig.js');
 //var BigNumber = require('bignumber.js');
 var stuff = require('./stuff.js')
@@ -80,3 +80,4 @@ contract('Oracles', async (accounts) => {
 
 
 });
+*/

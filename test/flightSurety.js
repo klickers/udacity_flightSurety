@@ -15,6 +15,13 @@ contract('Flight Surety Tests', async (accounts) => {
     var airline5;
     var flightSuretyData;
     var flightSuretyApp;
+    const STATUS_CODE_UNKNOWN = 0;
+    const STATUS_CODE_ON_TIME = 10;
+    const STATUS_CODE_LATE_AIRLINE = 20;
+    const STATUS_CODE_LATE_WEATHER = 30;
+    const STATUS_CODE_LATE_TECHNICAL = 40;
+    const STATUS_CODE_LATE_OTHER = 50;
+    const timestamp = Date.now();
     before('setup contract', async () => {
         owner = accounts[0];
         airline1 = accounts[1];
@@ -253,7 +260,6 @@ contract('Flight Surety Tests', async (accounts) => {
     assert.equal(votes, 1, "Airline should have a vote of 1")
   });
 
-
   it('registered (airline) 3 can register an airline 5', async () => {
 
     // ARRANGE
@@ -295,49 +301,129 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  it('registered (airline) 5 can queue but not register an airline 6', async () => {
+  it('registering a flight', async () => {
 
     // ARRANGE
-    let newAirline = accounts[6];
+    let flight = "CC 135";
     let result;
 
     // ACT
     try {
-        await flightSuretyApp.addAirline(newAirline, {from: airline5});
+        await flightSuretyApp.registerFlight(airline3, flight, timestamp, STATUS_CODE_ON_TIME);
     }
     catch(e) {
         console.error(e)
     }
-    result = await flightSuretyData.isQueued.call(newAirline);
-    votes = await flightSuretyData.getVotesForRegistration.call(newAirline)
 
     // ASSERT
-    assert.equal(result, 1, "Airline should be able to queue airline6");
-    assert.equal(votes, 1, "Airline should have a vote of 1")
+    assert.equal();
   });
 
 
+  it('purchasing insurance', async () => {
 
+      // ARRANGE
+      let flight = "CC 135";
+      let passenger = accounts[6];
+      let amount = web3.utils.toWei("10", 'wei');
+      let id;
+      let key;
 
+      // ACT
+      try {
+          key = await flightSuretyApp.getFlightKey(airline3, flight, timestamp)
+          id = await flightSuretyApp.purchaseInsurance(key, amount, { from: passenger, value: amount })
+      }
+      catch(e) {
+          console.error(e)
+      }
 
+      let blah = await flightSuretyApp.getInsuranceAmount(key, { from: passenger })
 
-  /*it('(airline) cannot register an Airline using registerAirline() if it is not funded', async () => {
+      // ASSERT
+      assert.equal(blah, amount, "Amount not equal");
 
-    // ARRANGE
-    let newAirline = airline3;
+  })
 
-    // ACT
-    try {
-        await flightSuretyApp.registerAirline(newAirline, {from: firstAirline});
-    }
-    catch(e) {
+  it('change flight status', async () => {
 
-    }
-    let result = await flightSuretyData.isAirline.call(newAirline);
+      // ARRANGE
+      let flight = "CC 135";
+      let status = STATUS_CODE_LATE_AIRLINE;
+      let id;
+      let key;
 
-    // ASSERT
-    assert.equal(result, false, "Airline should not be able to register another airline if it hasn't provided funding");
+      // ACT
+      try {
+          key = await flightSuretyApp.getFlightKey(airline3, flight, timestamp)
+          id = await flightSuretyApp.changeFlightStatus(key, status, { from: owner })
+      }
+      catch(e) {
+          console.error(e)
+      }
 
-});*/
+      let blah = await flightSuretyApp.getFlightStatus(key)
+
+      // ASSERT
+      assert.equal(blah, status, "Status has not been changed");
+
+  })
+
+  it('receive insurance payment', async () => {
+
+      // ARRANGE
+      let flight = "CC 135";
+      let passenger = accounts[6];
+      let id;
+      let key;
+      let amountGotten = web3.utils.toWei('15', 'wei');
+
+      // ACT
+      try {
+          key = await flightSuretyApp.getFlightKey(airline3, flight, timestamp)
+          id = await flightSuretyApp.receiveInsurancePayment(key, { from: passenger })
+      }
+      catch(e) {
+          console.error(e)
+      }
+
+      let blah = await flightSuretyApp.getInsuranceReceived(key, { from: passenger })
+      let blah2 = await flightSuretyApp.getInsuranceCredit({ from: passenger })
+
+      // ASSERT
+      assert.equal(blah, true, "Insurance hasn't been received");
+      assert.equal(blah2, amountGotten, "Insurance hasn't been received");
+  })
+
+  it('withdraw insurance payment', async () => {
+
+      // ARRANGE
+      let flight = "CC 135";
+      let passenger = accounts[6];
+      let amount = await web3.utils.toWei('15', 'wei')
+      let id;
+      let key;
+
+      console.log(await web3.eth.getBalance(passenger), "passenger money before")
+
+      // ACT
+      try {
+          key = await flightSuretyApp.getFlightKey(airline3, flight, timestamp)
+          id = await flightSuretyApp.withdrawInsurancePayment(amount, { from: passenger })
+      }
+      catch(e) {
+          console.error(e)
+      }
+
+      console.log(await web3.eth.getBalance(passenger), "passenger money after")
+
+      console.log(await web3.eth.getBalance(owner), "owner money")
+
+      let blah = await flightSuretyApp.getInsuranceCredit({ from: passenger });
+
+      // ASSERT
+      assert.equal(blah, 0, "Insurance hasn't been withdrawn");
+
+  });
 
 });

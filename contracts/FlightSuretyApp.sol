@@ -150,6 +150,43 @@ contract FlightSuretyApp {
         return flightSuretyData.getVoters(airline);
     }
 
+    function getFlightStatus(bytes32 flight)
+        public
+        view
+        returns(uint)
+    {
+        return flights[flight].statusCode;
+    }
+
+    function getInsuranceAmount(bytes32 flight)
+        public
+        view
+        returns(uint)
+    {
+        bytes32 id = keccak256(abi.encodePacked(msg.sender, flight));
+        return insurances[id].amount;
+    }
+
+    function getInsuranceCredit()
+        public
+        view
+        returns(uint)
+    {
+        return insuranceCredit[msg.sender];
+    }
+
+    function getInsuranceReceived(bytes32 flight)
+        public
+        view
+        returns(bool)
+    {
+        bytes32 id = keccak256(abi.encodePacked(msg.sender, flight));
+        return insurances[id].received;
+    }
+
+
+
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -245,19 +282,21 @@ contract FlightSuretyApp {
     */
     function registerFlight
                                 (
-                                    bytes32 flight,
-                                    uint8 statusCode,
-                                    uint256 updatedTimestamp,
-                                    address airline
+                                    address airline,
+                                    string calldata flight,
+                                    uint256 timestamp,
+                                    uint8 statusCode
                                 )
                                 external
                                 payable
     {
-        flights[flight].isRegistered = true;
-        flights[flight].statusCode = statusCode;
-        flights[flight].updatedTimestamp = updatedTimestamp;
-        flights[flight].airline = airline;
+        bytes32 key = getFlightKey(airline, flight, timestamp);
+        flights[key].isRegistered = true;
+        flights[key].statusCode = statusCode;
+        flights[key].updatedTimestamp = timestamp;
+        flights[key].airline = airline;
     }
+
 
     function purchaseInsurance(
         bytes32 flight,
@@ -265,6 +304,7 @@ contract FlightSuretyApp {
     )
         public
         payable
+        returns(bytes32)
     {
         require(amount <= 1 ether, "Amount too much.");
         require(msg.value >= amount, "Amount not enough.");
@@ -276,6 +316,8 @@ contract FlightSuretyApp {
         insurances[id].flight = flight;
         insurances[id].amount = amount;
         insurances[id].received = false;
+
+        return id;
     }
 
 
@@ -286,7 +328,7 @@ contract FlightSuretyApp {
         payable
     {
         // correct reason for insurance
-        require(flights[flight].statusCode == STATUS_CODE_LATE_AIRLINE, "Not available for insurance payment");
+        require(flights[flight].statusCode == STATUS_CODE_LATE_AIRLINE, "Flight not available for insurance payment");
 
         // find insurance
         bytes32 id = keccak256(abi.encodePacked(msg.sender, flight));
@@ -313,6 +355,13 @@ contract FlightSuretyApp {
 
         // pay
         msg.sender.transfer(amount);
+    }
+
+    function changeFlightStatus(bytes32 flight, uint8 statusCode)
+        requireContractOwner
+        public
+    {
+        flights[flight].statusCode = statusCode;
     }
 
    /**
@@ -474,7 +523,7 @@ contract FlightSuretyApp {
                             uint256 timestamp
                         )
                         pure
-                        internal
+                        public
                         returns(bytes32)
     {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
