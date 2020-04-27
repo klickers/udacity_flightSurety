@@ -82,25 +82,6 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  /*it(`(multiparty) can block access to functions using requireIsOperational when operating status is false`, async function () {
-
-      await flightSuretyData.setOperatingStatus(true);
-
-      let reverted = true;
-      try
-      {
-          await flightSuretyData.setOperatingStatus(false);
-      }
-      catch(e) {
-          reverted = false;
-      }
-      assert.equal(reverted, false, "Access not blocked for requireIsOperational");
-
-      // Set it back for other tests to work
-      await flightSuretyData.setOperatingStatus(true);
-
-  }); */
-
   it('owner is registered (airline)', async () => {
 
     // ARRANGE
@@ -144,7 +125,9 @@ contract('Flight Surety Tests', async (accounts) => {
 
     // ARRANGE
     let newAirline = airline2;
-    let ether = web3.utils.toWei("10", 'wei'); // would be ether in real life, but wei as I'm testing
+    // would be ether in real life, but wei as I'm testing.
+    // the fee is 10 wei; the 12 wei tests the refund function works
+    let ether = web3.utils.toWei("12", 'wei');
 
     // ACT
     try {
@@ -154,6 +137,7 @@ contract('Flight Surety Tests', async (accounts) => {
         console.error(e)
     }
     let result = await flightSuretyApp.hasPaidFee.call();
+
 
     // ASSERT
     assert.equal(result, true, "Airline should be able to pay fee");
@@ -301,6 +285,7 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
+
   it('registering a flight', async () => {
 
     // ARRANGE
@@ -316,7 +301,7 @@ contract('Flight Surety Tests', async (accounts) => {
     }
 
     // ASSERT
-    assert.equal();
+
   });
 
 
@@ -416,8 +401,6 @@ contract('Flight Surety Tests', async (accounts) => {
       }
 
       console.log(await web3.eth.getBalance(passenger), "passenger money after")
-
-      console.log(await web3.eth.getBalance(owner), "owner money")
 
       let blah = await flightSuretyApp.getInsuranceCredit({ from: passenger });
 

@@ -1,8 +1,6 @@
-
 import DOM from './dom';
 import Contract from './contract';
 import './flightsurety.css';
-
 
 (async() => {
 
@@ -23,15 +21,6 @@ import './flightsurety.css';
             // Write transaction
             contract.fetchFlightStatus(flight, (error, result) => {
                 display('Oracles', 'Trigger oracles', [ { label: 'Fetch Flight Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
-            });
-        })
-
-        DOM.elid('purchase-insurance').addEventListener('click', () => {
-            let flight = DOM.elid('flight').value;
-            let amount = DOM.elid('insurance-amount').value;
-            // Write transaction
-            contract.purchaseInsurance(flight, amount, (error, result) => {
-                display('Oracles', 'Trigger oracles', [ { label: 'Purchase insurance', error: error, value: result.flight + ' ' + result.timestamp} ]);
             });
         })
 

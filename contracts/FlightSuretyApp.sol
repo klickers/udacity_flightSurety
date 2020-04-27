@@ -115,6 +115,12 @@ contract FlightSuretyApp {
         flightSuretyData = FlightSuretyData(dataContractAddress);
         contractOwner = msg.sender;
         paidFee[contractOwner] = true;
+
+        uint8[3] memory indexes = generateIndexes(msg.sender);
+        oracles[contractOwner] = Oracle({
+                                        isRegistered: true,
+                                        indexes: indexes
+                                    });
     }
 
     /********************************************************************************************/

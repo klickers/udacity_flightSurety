@@ -10,6 +10,28 @@ web3.eth.defaultAccount = web3.eth.accounts[0];
 let flightSuretyApp = new web3.eth.Contract(FlightSuretyApp.abi, config.appAddress);
 
 
+let accounts = await this.web3.eth.getAccounts();
+for(let i = 1; i < 25; i++) {
+    flightSuretyApp.registerOracle({ from: accounts[i] })
+}
+
+async getFlightStatus(request) {
+    let response = {};
+    response.index = request.index;
+    response.airline = request.airline;
+    response.flight = request.flight;
+    response.timestamp = request.timestamp;
+
+    let reportedStatuses = [];
+    flightSuretyApp.oracles.forEach(oracle => {
+        let status = oracle.getFlightStatus(request);
+        if(status) reportedStatuses.push(status);
+    });
+
+    return reportedStatuses;
+}
+
+
 flightSuretyApp.events.OracleRequest({
     fromBlock: 0
   }, function (error, event) {
@@ -25,5 +47,3 @@ app.get('/api', (req, res) => {
 })
 
 export default app;
-
-
