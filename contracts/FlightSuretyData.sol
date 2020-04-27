@@ -13,10 +13,14 @@ contract FlightSuretyData {
     bool private operational = true;                                    // Blocks all state changes throughout the contract if false
 
     struct AirlineProfile {
+        bool isQueued;
+        uint votesForRegistration;
+        address[] voters;
         bool isRegistered;
     }
 
-    uint constant M = 2;
+    uint constant M = 4;
+    uint public airlineCount;
     address[] multiCalls = new address[](0);
     mapping(address => AirlineProfile) airlineProfiles;   // Mapping for storing airline profiles
 
@@ -34,6 +38,11 @@ contract FlightSuretyData {
                                 )
                                 public
     {
+        airlineProfiles[msg.sender].isQueued = false;
+        airlineProfiles[msg.sender].votesForRegistration = 0;
+        airlineProfiles[msg.sender].voters.push(msg.sender);
+        airlineProfiles[msg.sender].isRegistered = true;
+        airlineCount = 1;
         contractOwner = msg.sender;
     }
 
@@ -64,6 +73,16 @@ contract FlightSuretyData {
         _;
     }
 
+    /**
+    * @dev Modifier that requires the sender to be a registered airline
+    */
+    modifier requireIsAirline()
+    {
+        require(isAirline(msg.sender), "Caller is not a registered airline");
+        _;
+    }
+
+
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
@@ -81,6 +100,91 @@ contract FlightSuretyData {
         return operational;
     }
 
+    /**
+    * @dev Get operating status of contract
+    *
+    * @return A bool that is the current operating status
+    */
+    function isAirline(
+        address airlineAddress
+    )
+                            public
+                            view
+                            returns(bool)
+    {
+        return airlineProfiles[airlineAddress].isRegistered;
+    }
+
+    /**
+    * @dev Get queued status of airline
+    *
+    * @return A bool that is the current airline queued status
+    */
+    function isQueued(
+        address airlineAddress
+    )
+                            public
+                            view
+                            returns(bool)
+    {
+        return airlineProfiles[airlineAddress].isQueued;
+    }
+
+
+    /**
+    * @dev Get numbered of airlines
+    *
+    * @return A uint that is the current number of airlines
+    */
+    function getAirlineCount()
+                            public
+                            view
+                            returns(uint)
+    {
+        return airlineCount;
+    }
+
+
+    /**
+    * @dev Get minimum numbered of airlines
+    *
+    * @return A uint that is the minimum number of airlines
+    */
+    function getM()
+                            public
+                            view
+                            returns(uint)
+    {
+        return M;
+    }
+
+
+    /**
+    * @dev Get votes for an airline's registration
+    *
+    * @return A uint that is the number of votes for registration an airline acquires
+    */
+    function getVotesForRegistration(address airline)
+                            public
+                            view
+                            returns(uint)
+    {
+        return airlineProfiles[airline].voters.length;
+    }
+
+    /**
+    * @dev Get voter for an airline's registration
+    *
+    * @return A bool that is the voter status of a queued airline
+    */
+    function getVoters(address airline)
+                            public
+                            view
+                            returns(address[] memory)
+    {
+        return airlineProfiles[airline].voters;
+    }
+
 
     /**
     * @dev Sets contract operations on/off
@@ -95,7 +199,7 @@ contract FlightSuretyData {
                             requireContractOwner
     {
         require(mode != operational, "New mode must be different from existing mode");
-        require(airlineProfiles[msg.sender].isRegistered, "Caller is not an admin");
+        require(airlineProfiles[msg.sender].isRegistered, "Caller is not registered");
 
         bool isDuplicate = false;
         for(uint c=0; c<multiCalls.length; c++) {
@@ -123,14 +227,80 @@ contract FlightSuretyData {
     *      Can only be called from FlightSuretyApp contract
     *
     */
-    function registerAirline
+    function queueAirline
                             (
+                                address newAirline,
+                                address senderAirline
                             )
                             external
-                            pure
+                            returns(bool)
     {
+        // add airline to mapping
+        airlineProfiles[newAirline].isQueued = true;
+        airlineProfiles[newAirline].votesForRegistration += 1;
+        airlineProfiles[newAirline].voters.push(senderAirline);
+        airlineProfiles[newAirline].isRegistered = false;
 
+        return bool(airlineProfiles[newAirline].isQueued);
     }
+
+
+    /**
+     * @dev Vote for an airline to be added to the registration queue
+     *      Can only be called from FlightSuretyApp contract
+     *
+     */
+     function voteForRegistration
+                             (
+                                 address newAirline,
+                                 address senderAirline
+                             )
+                             external
+                             //requireContractOwner
+                             returns(uint)
+     {
+         bool isDuplicate;
+         for(uint c=0; c < airlineProfiles[newAirline].voters.length; c++) {
+             if (airlineProfiles[newAirline].voters[c] == senderAirline) {
+                 isDuplicate = true;
+                 break;
+             }
+         }
+
+         if (!isDuplicate)
+         {
+             // add vote
+             airlineProfiles[newAirline].voters.push(senderAirline);
+             airlineProfiles[newAirline].votesForRegistration += 1;
+             return airlineProfiles[newAirline].votesForRegistration;
+         }
+         else {
+             revert("Airline already voted");
+         }
+     }
+
+
+    /**
+     * @dev Register an airline
+     *      Can only be called from FlightSuretyApp contract
+     *
+     */
+     function registerAirline
+                             (
+                                 address newAirline,
+                                 address senderAirline
+                             )
+                             external
+                             returns(bool)
+     {
+         // add airline to mapping
+         airlineProfiles[newAirline].isQueued = false;
+         airlineProfiles[newAirline].isRegistered = true;
+         // add to airlineCount
+         airlineCount += 1;
+         // return
+         return bool(airlineProfiles[newAirline].isRegistered);
+     }
 
 
    /**

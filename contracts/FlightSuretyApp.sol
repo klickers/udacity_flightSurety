@@ -6,15 +6,22 @@ pragma solidity >=0.4.25;
 
 import "../node_modules/@openzeppelin/contracts/math/SafeMath.sol";
 
+
 /************************************************** */
 /* FlightSurety Smart Contract                      */
 /************************************************** */
 contract FlightSuretyApp {
     using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
+    using SafeMath for uint; // Allow SafeMath functions to be called for all uint types (similar to "prototype" in Javascript)
+
+    FlightSuretyData flightSuretyData;
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
+
+    uint constant fee = 10 wei;  // would be ether in real life, but I don't have that much ether to work with
+    mapping(address => bool) paidFee;
 
     // Flight status codees
     uint8 private constant STATUS_CODE_UNKNOWN = 0;
@@ -24,7 +31,7 @@ contract FlightSuretyApp {
     uint8 private constant STATUS_CODE_LATE_TECHNICAL = 40;
     uint8 private constant STATUS_CODE_LATE_OTHER = 50;
 
-    address private contractOwner;          // Account used to deploy contract
+    address payable private contractOwner;          // Account used to deploy contract
 
     struct Flight {
         bool isRegistered;
@@ -33,6 +40,16 @@ contract FlightSuretyApp {
         address airline;
     }
     mapping(bytes32 => Flight) private flights;
+
+    struct Insurance {
+        bytes32 id;
+        address passenger;
+        bytes32 flight;
+        uint amount;
+        bool received;
+    }
+    mapping(bytes32 => Insurance) public insurances;
+    mapping(address => uint256) private insuranceCredit;
 
 
     /********************************************************************************************/
@@ -50,7 +67,7 @@ contract FlightSuretyApp {
     modifier requireIsOperational()
     {
          // Modify to call data contract's status
-        require(true, "Contract is currently not operational");
+        require(flightSuretyData.isOperational(), "Contract is currently not operational");
         _;  // All modifiers require an "_" which indicates where the function body will be added
     }
 
@@ -60,6 +77,24 @@ contract FlightSuretyApp {
     modifier requireContractOwner()
     {
         require(msg.sender == contractOwner, "Caller is not contract owner");
+        _;
+    }
+
+    /**
+    * @dev Modifier that requires the sender to be a registered airline
+    */
+    modifier requireIsAirline()
+    {
+        require(flightSuretyData.isAirline(msg.sender), "Caller is not a registered airline");
+        _;
+    }
+
+    /**
+    * @dev Modifier that requires the sender to have paid a fee
+    */
+    modifier requireHasPaidFee()
+    {
+        require(paidFee[msg.sender], "Caller has not paid fee");
         _;
     }
 
@@ -73,10 +108,13 @@ contract FlightSuretyApp {
     */
     constructor
                                 (
+                                    address dataContractAddress
                                 )
                                 public
     {
+        flightSuretyData = FlightSuretyData(dataContractAddress);
         contractOwner = msg.sender;
+        paidFee[contractOwner] = true;
     }
 
     /********************************************************************************************/
@@ -85,30 +123,120 @@ contract FlightSuretyApp {
 
     function isOperational()
                             public
-                            pure
+                            view
                             returns(bool)
     {
-        return true;  // Modify to call data contract's status
+        return flightSuretyData.isOperational();  // Modify to call data contract's status
+    }
+
+    function hasPaidFee()
+                            public
+                            view
+                            returns(bool)
+    {
+        return paidFee[msg.sender];
+    }
+
+    /**
+    * @dev Get voter for an airline's registration
+    *
+    * @return A bool that is the voter status of a queued airline
+    */
+    function getVoter(address airline)
+                            public
+                            view
+                            returns(address payable[] memory)
+    {
+        return flightSuretyData.getVoters(airline);
     }
 
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
-
-   /**
-    * @dev Add an airline to the registration queue
-    *
-    */
-    function registerAirline
-                            (
-                            )
-                            external
-                            pure
-                            returns(bool success, uint256 votes)
+    function payFee()
+        external
+        requireIsAirline
+        payable
+        returns(bool)
     {
-        return (success, 0);
+        // checks if value is enough ether
+        require(msg.value >= fee, "Fee not enough.");
+        // transfers ether
+        contractOwner.transfer(fee);
+        // refunds excess ether
+        if (msg.value > fee)
+        {
+            msg.sender.transfer(msg.value.sub(fee));
+        }
+        // sets paidFee to true
+        paidFee[msg.sender] = true;
+        return paidFee[msg.sender];
     }
+
+
+    /**
+     * @dev Add an airline to the registration queue
+     *      Can only be called from FlightSuretyApp contract
+     *
+     */
+     function addAirline
+                             (
+                                 address newAirline
+                             )
+                             external
+                             requireIsAirline
+                             requireHasPaidFee
+                             returns(bool)
+     {
+         // executes if there are less than four airlines
+         if (flightSuretyData.getAirlineCount() < flightSuretyData.getM())
+         {
+             // executes if airline has not yet been queued
+             if (!flightSuretyData.isAirline(newAirline) && !flightSuretyData.isQueued(newAirline))
+             {
+                 // queues airline
+                 flightSuretyData.queueAirline(newAirline, msg.sender);
+                 // registers airline
+                 return flightSuretyData.registerAirline(newAirline, msg.sender);
+             }
+             // registers airline if it is on queue
+             else if (flightSuretyData.isQueued(newAirline))
+             {
+                 // registers airline
+                 return flightSuretyData.registerAirline(newAirline, msg.sender);
+             }
+         }
+         else {
+             // executes if airline has not yet been queued
+             if (!flightSuretyData.isAirline(newAirline) && !flightSuretyData.isQueued(newAirline))
+             {
+                 // queues airline
+                 return flightSuretyData.queueAirline(newAirline, msg.sender);
+             }
+             // votes for airline if it is on queue
+             else if (flightSuretyData.isQueued(newAirline))
+             {
+                 //require(flightSuretyData.getVoter(newAirline) == false, "Caller has already voted");
+
+                 // count votesForRegistration
+                 uint num = flightSuretyData.getVotesForRegistration(newAirline);
+                 // vote for airline
+                 uint num2 = flightSuretyData.voteForRegistration(newAirline, msg.sender);
+                 // check if new votes got through
+                 if ((num.add(1)) == num2)
+                 {
+                     if (num2 >= (flightSuretyData.getAirlineCount().div(2)))
+                     {
+                         return flightSuretyData.registerAirline(newAirline, msg.sender);
+                     }
+                 }
+                 else {
+                     revert("Vote did not go through");
+                 }
+             }
+         }
+     }
 
 
    /**
@@ -117,11 +245,74 @@ contract FlightSuretyApp {
     */
     function registerFlight
                                 (
+                                    bytes32 flight,
+                                    uint8 statusCode,
+                                    uint256 updatedTimestamp,
+                                    address airline
                                 )
                                 external
-                                pure
+                                payable
     {
+        flights[flight].isRegistered = true;
+        flights[flight].statusCode = statusCode;
+        flights[flight].updatedTimestamp = updatedTimestamp;
+        flights[flight].airline = airline;
+    }
 
+    function purchaseInsurance(
+        bytes32 flight,
+        uint amount
+    )
+        public
+        payable
+    {
+        require(amount <= 1 ether, "Amount too much.");
+        require(msg.value >= amount, "Amount not enough.");
+
+        contractOwner.transfer(amount);
+        bytes32 id = keccak256(abi.encodePacked(msg.sender, flight));
+        insurances[id].id = id;
+        insurances[id].passenger = msg.sender;
+        insurances[id].flight = flight;
+        insurances[id].amount = amount;
+        insurances[id].received = false;
+    }
+
+
+    function receiveInsurancePayment(
+        bytes32 flight
+    )
+        public
+        payable
+    {
+        // correct reason for insurance
+        require(flights[flight].statusCode == STATUS_CODE_LATE_AIRLINE, "Not available for insurance payment");
+
+        // find insurance
+        bytes32 id = keccak256(abi.encodePacked(msg.sender, flight));
+        uint amount = insurances[id].amount;
+
+        // make sure insurance has not yet been received
+        require(!insurances[id].received, "Insurance already received");
+        insurances[id].received = true;
+
+        // pay
+        insuranceCredit[msg.sender] = amount.mul(3).div(2);
+    }
+
+
+    function withdrawInsurancePayment(uint amount)
+        public
+        payable
+    {
+        // amount has to be enough
+        require(insuranceCredit[msg.sender] >= amount, "Amount not enough");
+
+        // withdraw requested amount
+        insuranceCredit[msg.sender] = insuranceCredit[msg.sender].sub(amount);
+
+        // pay
+        msg.sender.transfer(amount);
     }
 
    /**
@@ -138,6 +329,7 @@ contract FlightSuretyApp {
                                 internal
                                 pure
     {
+
     }
 
 
@@ -334,4 +526,19 @@ contract FlightSuretyApp {
 
 // endregion
 
+}
+
+
+
+contract FlightSuretyData {
+    function isOperational() public view returns(bool);
+    function isAirline(address airlineAddress) public view returns(bool);
+    function isQueued(address airlineAddress) public view returns(bool);
+    function getAirlineCount() public view returns(uint);
+    function getM() public view returns(uint);
+    function getVotesForRegistration(address airline) public view returns(uint);
+    function getVoters(address airline) public view returns(address payable[] memory);
+    function queueAirline(address newAirline, address senderAirline) external returns(bool);
+    function voteForRegistration(address newAirline, address senderAirline) external returns(uint);
+    function registerAirline(address newAirline, address senderAirline) external returns(bool);
 }
